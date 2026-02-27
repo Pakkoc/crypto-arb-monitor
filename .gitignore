@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AgenticWorkflow runtime (session-specific, not source)
+.claude/context-snapshots/
+.claude/tasks/
+.claude/teams/
+work_log.jsonl
+knowledge-index.jsonl
+verification-logs/
+pacs-logs/
+review-logs/
+diagnosis-logs/
+autopilot-logs/
+risk-scores.json
+.tdd-guard
+
+# Build
+dist/
+build/
+*.egg-info/
