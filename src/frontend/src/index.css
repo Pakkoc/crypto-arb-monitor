@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Base styles for the dark financial dashboard */
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-gray-950 text-gray-100 antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabular numbers utility for price displays */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Range input styling for dark theme */
+input[type="range"] {
+  @apply h-1.5 cursor-pointer appearance-none rounded-full bg-gray-700;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  @apply h-3.5 w-3.5 cursor-pointer appearance-none rounded-full bg-blue-500;
+}
+
+input[type="range"]::-moz-range-thumb {
+  @apply h-3.5 w-3.5 cursor-pointer appearance-none rounded-full border-0 bg-blue-500;
+}
+
+/* Flash animation for price updates */
+@keyframes flash-green {
+  0%, 100% { color: inherit; }
+  50% { color: #4ade80; }
+}
+
+@keyframes flash-red {
+  0%, 100% { color: inherit; }
+  50% { color: #f87171; }
+}
