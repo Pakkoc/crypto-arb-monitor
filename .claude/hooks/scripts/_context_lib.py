@@ -23,7 +23,10 @@ import os
 import re
 import sys
 import time
-import fcntl
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 import subprocess
 import tempfile
 from datetime import datetime
@@ -2272,17 +2275,36 @@ def atomic_write(filepath, content):
         raise
 
 
+def _lock_file(f):
+    """Acquire exclusive file lock (cross-platform)."""
+    if sys.platform == "win32":
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(f):
+    """Release file lock (cross-platform)."""
+    if sys.platform == "win32":
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
 def append_with_lock(filepath, content):
-    """Append content with file locking (fcntl.flock)."""
+    """Append content with file locking (cross-platform)."""
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
     with open(filepath, "a", encoding="utf-8") as f:
         try:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            _lock_file(f)
             f.write(content)
             f.flush()
         finally:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            _unlock_file(f)
 
 
 def load_work_log(snapshot_dir):
@@ -3318,7 +3340,10 @@ def replace_or_append_session_facts(ki_path, facts):
     try:
         lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            if sys.platform == "win32":
+                msvcrt.locking(lock_fd, msvcrt.LK_LOCK, 1)
+            else:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
             # Read existing entries (file may not exist yet)
             lines = []
@@ -3351,7 +3376,13 @@ def replace_or_append_session_facts(ki_path, facts):
             # either old file or new file exists, never a half-written state.
             atomic_write(ki_path, "".join(kept))
         finally:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            if sys.platform == "win32":
+                try:
+                    msvcrt.locking(lock_fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            else:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
             os.close(lock_fd)
     except Exception:
         # Non-blocking fallback: append-only (no dedup, but no data loss)
@@ -3858,7 +3889,14 @@ def _read_sot_outputs(project_dir):
                 except ImportError:
                     continue
             if isinstance(data, dict):
-                outputs = data.get("outputs", {})
+                # Support both flat (outputs: ...) and nested (workflow: {outputs: ...})
+                outputs = data.get("outputs")
+                if not isinstance(outputs, dict):
+                    # Try nested structure: workflow.outputs, project.outputs, etc.
+                    for v in data.values():
+                        if isinstance(v, dict) and isinstance(v.get("outputs"), dict):
+                            outputs = v["outputs"]
+                            break
                 return outputs if isinstance(outputs, dict) else {}
         except Exception:
             continue
