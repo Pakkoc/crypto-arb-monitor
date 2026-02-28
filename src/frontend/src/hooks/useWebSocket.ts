@@ -18,6 +18,7 @@ import type {
   WsSnapshotData,
 } from "@/types/ws";
 import type { PriceEntry, SpreadEntry } from "@/types";
+import api from "@/lib/api";
 
 const WS_URL = "/api/v1/ws";
 const MAX_BACKOFF_MS = 30_000;
@@ -32,6 +33,62 @@ interface UseWebSocketOptions {
 
 function backoffDelay(attempt: number): number {
   return Math.min(1_000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
+}
+
+/** Seed price & spread history from REST API after initial WS snapshot. */
+async function seedHistoryFromDb(symbols: string[]) {
+  const store = usePriceStore.getState();
+  const targetSymbols = symbols.length > 0 ? symbols : ["BTC", "ETH", "XRP", "SOL", "DOGE"];
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+
+  try {
+    // Fetch price history for each symbol (all exchanges, last 1h, limit 1000)
+    const priceResults = await Promise.allSettled(
+      targetSymbols.map((sym) =>
+        api.getPriceHistory({ symbol: sym, start_time: oneHourAgo, limit: 1000 }),
+      ),
+    );
+
+    for (const result of priceResults) {
+      if (result.status !== "fulfilled") continue;
+      const rows = result.value.data?.data;
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const entry = row as PriceEntry;
+        const key = `${entry.exchange}:${entry.symbol}`;
+        store.priceHistory[key] = store.priceHistory[key] ?? [];
+        store.priceHistory[key].push(entry);
+      }
+    }
+
+    // Fetch spread history for each symbol (all pairs, last 1h, limit 1000)
+    const spreadResults = await Promise.allSettled(
+      targetSymbols.map((sym) =>
+        api.getSpreadHistory({ symbol: sym, start_time: oneHourAgo, limit: 1000 }),
+      ),
+    );
+
+    for (const result of spreadResults) {
+      if (result.status !== "fulfilled") continue;
+      const rows = result.value.data?.data;
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows) {
+        const entry = row as SpreadEntry;
+        const key = `${entry.exchange_a}:${entry.exchange_b}:${entry.symbol}`;
+        store.spreadHistory[key] = store.spreadHistory[key] ?? [];
+        store.spreadHistory[key].push(entry);
+      }
+    }
+
+    // Trigger a store update so components re-render with the seeded history
+    usePriceStore.setState({
+      priceHistory: { ...store.priceHistory },
+      spreadHistory: { ...store.spreadHistory },
+    });
+  } catch {
+    // Non-critical — charts will still work with live data
+    console.warn("[WS] Failed to seed history from DB");
+  }
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
@@ -134,6 +191,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               if (data.fx_rate) {
                 setFxRate(data.fx_rate);
               }
+              // Seed chart history from DB so charts aren't empty on page load
+              seedHistoryFromDb(symbolsRef.current);
               break;
             }
 

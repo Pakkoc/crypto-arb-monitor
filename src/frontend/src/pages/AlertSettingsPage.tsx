@@ -8,10 +8,11 @@
  * - Delete alert with confirmation
  * - Alert history tab
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAlerts } from "@/hooks/useAlerts";
 import api from "@/lib/api";
+import { usePriceStore } from "@/stores/priceStore";
 import { AlertDirection } from "@/types/enums";
 import { EXCHANGE_NAMES, ALL_EXCHANGES, formatSpreadPct, formatDatetime } from "@/lib/format";
 import type { AlertConfig, AlertConfigCreate, AlertConfigUpdate, AlertHistoryEntry } from "@/types";
@@ -172,7 +173,7 @@ const DEFAULT_FORM: AlertFormData = {
   exchange_b: "",
   symbol: "BTC",
   threshold_pct: 2.0,
-  direction: AlertDirection.ABOVE,
+  direction: AlertDirection.BOTH,
   cooldown_minutes: 5,
 };
 
@@ -187,6 +188,20 @@ function AlertFormModal({
   onSubmit: (data: AlertFormData, editId: number | null) => Promise<void>;
   isSubmitting: boolean;
 }) {
+  // Derive available symbols from live price data
+  const symbolsKey = usePriceStore((s) => {
+    const syms = new Set<string>();
+    for (const key of Object.keys(s.prices)) {
+      const sym = key.split(":")[1];
+      if (sym) syms.add(sym);
+    }
+    return Array.from(syms).sort().join(",");
+  });
+  const availableSymbols = useMemo(
+    () => (symbolsKey ? symbolsKey.split(",") : ["BTC", "ETH", "XRP", "SOL", "DOGE"]),
+    [symbolsKey],
+  );
+
   const [form, setForm] = useState<AlertFormData>(() => {
     if (editAlert) {
       return {
@@ -268,11 +283,9 @@ function AlertFormModal({
               }
               className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-300 outline-none focus:border-blue-600"
             >
-              <option value="BTC">BTC</option>
-              <option value="ETH">ETH</option>
-              <option value="XRP">XRP</option>
-              <option value="SOL">SOL</option>
-              <option value="ADA">ADA</option>
+              {availableSymbols.map((sym) => (
+                <option key={sym} value={sym}>{sym}</option>
+              ))}
             </select>
           </div>
 
@@ -314,34 +327,7 @@ function AlertFormModal({
             </div>
           </div>
 
-          {/* Direction */}
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">
-              방향
-            </label>
-            <div className="flex gap-2">
-              {[
-                { value: AlertDirection.ABOVE, label: "이상" },
-                { value: AlertDirection.BELOW, label: "이하" },
-                { value: AlertDirection.BOTH, label: "양방향" },
-              ].map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, direction: opt.value }))
-                  }
-                  className={`rounded px-4 py-1.5 text-xs transition-colors ${
-                    form.direction === opt.value
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Direction — fixed to BOTH */}
 
           {/* Cooldown */}
           <div>

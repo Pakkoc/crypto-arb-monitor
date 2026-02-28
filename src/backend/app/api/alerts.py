@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import and_, func, select, update, delete
 
-from app.database import async_session_factory
+from app import database
 from app.models.alert import AlertConfig, AlertHistory
 from app.models.user import TrackedSymbol, UserPreference
 from app.schemas.alert import AlertConfigCreate, AlertConfigUpdate
@@ -70,7 +70,7 @@ async def list_alerts(
     """List all alert configurations with optional filters."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         return {
             "status": "ok",
             "data": [],
@@ -78,7 +78,7 @@ async def list_alerts(
             "timestamp_ms": now_ms,
         }
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         conditions = []
         if enabled is not None:
             conditions.append(AlertConfig.enabled == (1 if enabled else 0))
@@ -118,11 +118,11 @@ async def create_alert(request: Request, body: AlertConfigCreate) -> dict:
     """Create a new alert configuration."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
     now_epoch = int(time.time())
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         async with session.begin():
             config = AlertConfig(
                 chat_id=body.chat_id,
@@ -161,7 +161,7 @@ async def get_alert_history(
     """Return alert trigger history log."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         return {
             "status": "ok",
             "data": [],
@@ -179,7 +179,7 @@ async def get_alert_history(
     else:
         start_epoch = start_time // 1000 if start_time > 1e12 else start_time
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         conditions = [
             AlertHistory.created_at >= start_epoch,
             AlertHistory.created_at <= end_epoch,
@@ -246,10 +246,10 @@ async def get_alert(alert_id: int) -> dict:
     """Get a single alert configuration by ID."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         result = await session.execute(
             select(AlertConfig).where(AlertConfig.id == alert_id)
         )
@@ -268,10 +268,10 @@ async def update_alert(request: Request, alert_id: int, body: AlertConfigUpdate)
     """Update an existing alert configuration (partial update)."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         async with session.begin():
             result = await session.execute(
                 select(AlertConfig).where(AlertConfig.id == alert_id)
@@ -312,10 +312,10 @@ async def delete_alert(request: Request, alert_id: int) -> dict:
     """Delete an alert configuration."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         async with session.begin():
             result = await session.execute(
                 select(AlertConfig).where(AlertConfig.id == alert_id)
@@ -345,10 +345,10 @@ async def list_symbols(request: Request) -> dict:
     """List all tracked symbols and their exchange coverage."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         return {"status": "ok", "data": [], "timestamp_ms": now_ms}
 
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         result = await session.execute(
             select(TrackedSymbol).order_by(TrackedSymbol.symbol)
         )
@@ -381,11 +381,11 @@ async def update_symbols(request: Request, body: dict) -> dict:
             detail={"code": "VALIDATION_ERROR", "message": "1 to 20 symbols required"},
         )
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         raise HTTPException(status_code=503, detail="Database not available")
 
     now_epoch = int(time.time())
-    async with async_session_factory() as session:
+    async with database.async_session_factory() as session:
         async with session.begin():
             # Get current symbols
             result = await session.execute(select(TrackedSymbol))
@@ -487,11 +487,11 @@ async def get_preferences() -> dict:
     """Get current dashboard user preferences (single-user system)."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         return {"status": "ok", "data": _DEFAULT_PREFERENCES, "timestamp_ms": now_ms}
 
     try:
-        async with async_session_factory() as session:
+        async with database.async_session_factory() as session:
             result = await session.execute(
                 select(UserPreference).where(UserPreference.id == 1)
             )
@@ -506,38 +506,51 @@ async def get_preferences() -> dict:
 
 
 @router.put("/preferences")
-async def update_preferences(body: dict) -> dict:
+async def update_preferences(request: Request, body: dict) -> dict:
     """Update user preferences (partial update via deep merge)."""
     now_ms = int(time.time() * 1000)
 
-    if async_session_factory is None:
+    if database.async_session_factory is None:
         return {"status": "ok", "data": _DEFAULT_PREFERENCES, "timestamp_ms": now_ms}
 
     try:
+        import copy
         now_epoch = int(time.time())
-        async with async_session_factory() as session:
+        result_data: dict | None = None
+
+        async with database.async_session_factory() as session:
             async with session.begin():
                 result = await session.execute(
                     select(UserPreference).where(UserPreference.id == 1)
                 )
                 row = result.scalar_one_or_none()
                 if row is None:
-                    # Merge body into defaults
-                    merged = {**_DEFAULT_PREFERENCES, **body}
+                    # Deep merge body into defaults (not shallow)
+                    merged = copy.deepcopy(_DEFAULT_PREFERENCES)
+                    _deep_merge(merged, body)
                     session.add(UserPreference(
                         id=1,
                         preferences_json=json.dumps(merged),
                         updated_at=now_epoch,
                     ))
-                    return {"status": "ok", "data": merged, "timestamp_ms": now_ms}
+                    result_data = merged
+                else:
+                    # Merge into existing
+                    current = json.loads(row.preferences_json)
+                    _deep_merge(current, body)
+                    row.preferences_json = json.dumps(current)
+                    row.updated_at = now_epoch
+                    result_data = current
+            # session.begin() __aexit__ commits here before return
 
-                # Merge into existing
-                current = json.loads(row.preferences_json)
-                _deep_merge(current, body)
-                row.preferences_json = json.dumps(current)
-                row.updated_at = now_epoch
-                return {"status": "ok", "data": current, "timestamp_ms": now_ms}
-    except Exception:
+        # Invalidate AlertEngine config cache so telegram_enabled/chat_id changes take effect
+        if hasattr(request.app.state, "alert_engine"):
+            request.app.state.alert_engine.invalidate_config_cache()
+
+        return {"status": "ok", "data": result_data, "timestamp_ms": now_ms}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("[preferences] Failed to update: %s", exc)
         return {"status": "ok", "data": _DEFAULT_PREFERENCES, "timestamp_ms": now_ms}
 
 

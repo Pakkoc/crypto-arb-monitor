@@ -18,6 +18,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { usePriceStore } from "@/stores/priceStore";
+import { usePreferences } from "@/hooks/usePreferences";
 import { EXCHANGE_NAMES, ALL_EXCHANGES } from "@/lib/format";
 import type { ExchangeId, Currency } from "@/types/enums";
 
@@ -89,6 +90,21 @@ function aggregateToOhlc(ticks: TickData[], bucketMs: number): OhlcData[] {
   return Array.from(bucketMap.values()).sort((a, b) => a.time - b.time);
 }
 
+/** Map dashboard chart_interval setting to PriceChart TimeRange */
+function mapIntervalToTimeRange(interval: string): TimeRange {
+  switch (interval) {
+    case "10s":
+    case "1m":
+      return "1h";
+    case "5m":
+      return "6h";
+    case "1h":
+      return "24h";
+    default:
+      return "1h";
+  }
+}
+
 export function PriceChart({
   defaultSymbol = "BTC",
   defaultExchange = "bithumb",
@@ -98,10 +114,11 @@ export function PriceChart({
   const priceSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
 
+  const { dashboard } = usePreferences();
   const [selectedSymbol, setSelectedSymbol] = useState(defaultSymbol);
   const [selectedExchange, setSelectedExchange] =
     useState<ExchangeId>(defaultExchange);
-  const [timeRange, setTimeRange] = useState<TimeRange>("1h");
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => mapIntervalToTimeRange(dashboard.chart_interval));
   const [chartType, setChartType] = useState<ChartType>("line");
 
   // Subscribe only to the selected key — other symbols' ticks won't trigger re-render

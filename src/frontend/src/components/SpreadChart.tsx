@@ -17,6 +17,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { usePriceStore } from "@/stores/priceStore";
+import { usePreferences } from "@/hooks/usePreferences";
 import { EXCHANGE_NAMES, KRW_EXCHANGES, USDT_EXCHANGES } from "@/lib/format";
 
 interface SpreadChartProps {
@@ -52,8 +53,24 @@ function formatTimeAxis(timestampMs: number): string {
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
 }
 
+/** Map dashboard chart_interval setting to SpreadChart TimeRange */
+function mapIntervalToRange(interval: string): TimeRange {
+  switch (interval) {
+    case "10s":
+    case "1m":
+      return "1h";
+    case "5m":
+      return "6h";
+    case "1h":
+      return "24h";
+    default:
+      return "1h";
+  }
+}
+
 export function SpreadChart({ symbol }: SpreadChartProps) {
-  const [timeRange, setTimeRange] = useState<TimeRange>("1h");
+  const { dashboard } = usePreferences();
+  const [timeRange, setTimeRange] = useState<TimeRange>(() => mapIntervalToRange(dashboard.chart_interval));
 
   // Build the set of spread keys for this symbol — only re-derive when spreads keys change
   const pairKeysStr = usePriceStore((s) => {

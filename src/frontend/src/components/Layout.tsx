@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { usePreferences } from "@/hooks/usePreferences";
 
 interface LayoutProps {
   children: ReactNode;
@@ -44,19 +45,21 @@ const NAV_ITEMS = [
 
 export function Layout({ children }: LayoutProps) {
   const { pathname } = useLocation();
+  const { dashboard } = usePreferences();
+  const isLight = dashboard.theme === "light";
 
   return (
-    <div className="flex min-h-screen min-w-[1024px] bg-gray-950 text-gray-100">
+    <div className={`flex min-h-screen min-w-[1024px] ${isLight ? "bg-gray-100 text-gray-900" : "bg-gray-950 text-gray-100"}`}>
       {/* Sidebar */}
-      <nav className="flex w-52 flex-col border-r border-gray-800 bg-gray-950">
+      <nav className={`flex w-52 flex-col border-r ${isLight ? "border-gray-300 bg-white" : "border-gray-800 bg-gray-950"}`}>
         {/* Logo */}
-        <div className="flex items-center gap-2 border-b border-gray-800 px-4 py-4">
+        <div className={`flex items-center gap-2 border-b px-4 py-4 ${isLight ? "border-gray-300" : "border-gray-800"}`}>
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
             CA
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white">크립토 차익</h1>
-            <p className="text-[10px] text-gray-600">모니터</p>
+            <h1 className={`text-sm font-bold ${isLight ? "text-gray-900" : "text-white"}`}>크립토 차익</h1>
+            <p className={`text-[10px] ${isLight ? "text-gray-500" : "text-gray-600"}`}>모니터</p>
           </div>
         </div>
 
@@ -75,10 +78,12 @@ export function Layout({ children }: LayoutProps) {
                 className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
                   isActive
                     ? "bg-blue-600/10 text-blue-400"
-                    : "text-gray-500 hover:bg-gray-900 hover:text-gray-300"
+                    : isLight
+                      ? "text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                      : "text-gray-500 hover:bg-gray-900 hover:text-gray-300"
                 }`}
               >
-                <span className={isActive ? "text-blue-400" : "text-gray-600"}>
+                <span className={isActive ? "text-blue-400" : isLight ? "text-gray-500" : "text-gray-600"}>
                   {item.icon}
                 </span>
                 {item.label}
@@ -88,8 +93,8 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-800 px-4 py-3">
-          <p className="text-[10px] text-gray-700">
+        <div className={`border-t px-4 py-3 ${isLight ? "border-gray-300" : "border-gray-800"}`}>
+          <p className={`text-[10px] ${isLight ? "text-gray-500" : "text-gray-700"}`}>
             크립토 차익 모니터 v1.0
           </p>
         </div>

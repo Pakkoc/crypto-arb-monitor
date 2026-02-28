@@ -7,6 +7,7 @@
  */
 import { memo, useState } from "react";
 import { usePriceStore } from "@/stores/priceStore";
+import { usePreferences } from "@/hooks/usePreferences";
 import {
   EXCHANGE_NAMES,
   KRW_EXCHANGES,
@@ -38,10 +39,12 @@ const SpreadCell = memo(function SpreadCell({
   data,
   rowExchange,
   colExchange,
+  spreadMode = "percentage",
 }: {
   data: SpreadCellData | null;
   rowExchange: string;
   colExchange: string;
+  spreadMode?: "percentage" | "absolute";
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -70,7 +73,9 @@ const SpreadCell = memo(function SpreadCell({
       <span
         className={`font-mono text-sm tabular-nums font-medium ${spreadColorClass(data.spreadPct)}`}
       >
-        {formatSpreadPct(data.spreadPct)}
+        {spreadMode === "absolute"
+          ? `₩${Math.round(Math.abs(Number(data.priceA) - Number(data.priceB))).toLocaleString("ko-KR")}`
+          : formatSpreadPct(data.spreadPct)}
       </span>
       {data.isStale && (
         <span className="ml-1 text-[10px] text-orange-400" title={data.staleReason ?? "Stale"}>
@@ -127,6 +132,8 @@ const SpreadCell = memo(function SpreadCell({
 
 export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
   const spreads = usePriceStore((s) => s.spreads);
+  const { dashboard } = usePreferences();
+  const spreadMode = dashboard.spread_matrix_mode;
 
   // Build lookup for spreads
   const getSpreadData = (
@@ -198,6 +205,7 @@ export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
                       data={getSpreadData(rowEx, colEx)}
                       rowExchange={rowEx}
                       colExchange={colEx}
+                      spreadMode={spreadMode}
                     />
                   ))}
                 </tr>
@@ -243,6 +251,7 @@ export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
                       }
                       rowExchange={rowEx}
                       colExchange={colEx}
+                      spreadMode={spreadMode}
                     />
                   ))}
                 </tr>

@@ -9,6 +9,7 @@
  */
 import { useState, useMemo } from "react";
 import { usePriceStore } from "@/stores/priceStore";
+import { usePreferences } from "@/hooks/usePreferences";
 import { ExchangeStatusBar } from "@/components/ExchangeStatusBar";
 import { ExchangePriceCard } from "@/components/ExchangePriceCard";
 import { SpreadMatrix } from "@/components/SpreadMatrix";
@@ -17,6 +18,7 @@ import { PriceChart } from "@/components/PriceChart";
 import { RecentAlerts } from "@/components/RecentAlerts";
 import { KRW_EXCHANGES, USDT_EXCHANGES } from "@/lib/format";
 import type { WsStatus } from "@/hooks/useWebSocket";
+import type { ExchangeId } from "@/types/enums";
 
 interface DashboardProps {
   wsStatus: WsStatus;
@@ -24,7 +26,18 @@ interface DashboardProps {
 
 export function Dashboard({ wsStatus }: DashboardProps) {
   const isInitialized = usePriceStore((s) => s.isInitialized);
-  const [selectedSymbol, setSelectedSymbol] = useState("BTC");
+  const { dashboard } = usePreferences();
+  const [selectedSymbol, setSelectedSymbol] = useState(dashboard.default_symbol);
+
+  // Filter exchanges based on user preferences
+  const visibleKrw = useMemo(
+    () => KRW_EXCHANGES.filter((ex) => (dashboard.visible_exchanges as string[]).includes(ex)),
+    [dashboard.visible_exchanges],
+  );
+  const visibleUsdt = useMemo(
+    () => USDT_EXCHANGES.filter((ex) => (dashboard.visible_exchanges as string[]).includes(ex)),
+    [dashboard.visible_exchanges],
+  );
 
   // Derive symbol list as a stable string — only re-renders when the set of symbols changes
   const symbolsKey = usePriceStore((s) => {
@@ -98,19 +111,19 @@ export function Dashboard({ wsStatus }: DashboardProps) {
       ) : (
         <>
           {/* Row 1: Exchange Price Cards */}
-          <div className="grid grid-cols-5 gap-3">
-            {KRW_EXCHANGES.map((ex) => (
+          <div className={`grid gap-3`} style={{ gridTemplateColumns: `repeat(${visibleKrw.length + visibleUsdt.length}, minmax(0, 1fr))` }}>
+            {visibleKrw.map((ex) => (
               <ExchangePriceCard
                 key={ex}
-                exchange={ex}
+                exchange={ex as ExchangeId}
                 currency="KRW"
                 symbols={availableSymbols}
               />
             ))}
-            {USDT_EXCHANGES.map((ex) => (
+            {visibleUsdt.map((ex) => (
               <ExchangePriceCard
                 key={ex}
-                exchange={ex}
+                exchange={ex as ExchangeId}
                 currency="USDT"
                 symbols={availableSymbols}
               />

@@ -55,6 +55,9 @@ class AlertEngine:
         self._configs: list[dict] = []
         self._configs_last_loaded: float = 0.0
         self._configs_ttl: float = 30.0  # Reload configs every 30 seconds
+        # Global notification preferences (cached alongside configs)
+        self._telegram_enabled: bool = True
+        self._global_chat_id: int | None = None
         # Telegram bot reference (set by main.py)
         self._telegram_bot: object | None = None
         # WS manager reference (set by main.py)
@@ -83,8 +86,11 @@ class AlertEngine:
         try:
             from sqlalchemy import select  # noqa: PLC0415
             from app.models.alert import AlertConfig  # noqa: PLC0415
+            from app.models.user import UserPreference  # noqa: PLC0415
+            import json  # noqa: PLC0415
 
             async with async_session_factory() as session:
+                # Load alert configs
                 stmt = select(AlertConfig).where(AlertConfig.enabled == 1)
                 result = await session.execute(stmt)
                 rows = result.scalars().all()
@@ -101,8 +107,27 @@ class AlertEngine:
                     }
                     for row in rows
                 ]
+
+                # Load global notification preferences
+                pref_result = await session.execute(
+                    select(UserPreference).where(UserPreference.id == 1)
+                )
+                pref_row = pref_result.scalar_one_or_none()
+                if pref_row and pref_row.preferences_json:
+                    prefs = json.loads(pref_row.preferences_json)
+                    notif = prefs.get("notifications", {})
+                    self._telegram_enabled = notif.get("telegram_enabled", True)
+                    raw_chat_id = notif.get("telegram_chat_id")
+                    self._global_chat_id = int(raw_chat_id) if raw_chat_id else None
+                else:
+                    self._telegram_enabled = True
+                    self._global_chat_id = None
+
                 self._configs_last_loaded = now
-                logger.debug("AlertEngine: loaded %d active configs", len(self._configs))
+                logger.debug(
+                    "AlertEngine: loaded %d active configs, telegram_enabled=%s, global_chat_id=%s",
+                    len(self._configs), self._telegram_enabled, self._global_chat_id,
+                )
         except Exception:
             logger.exception("AlertEngine: failed to load configs")
 
@@ -156,16 +181,24 @@ class AlertEngine:
             telegram_msg_id = None
             telegram_delivered = False
 
-            # Send Telegram notification
-            if self._telegram_bot is not None:
-                try:
-                    telegram_msg_id = await self._telegram_bot.send_alert(
-                        chat_id=config["chat_id"],
-                        message=message,
-                    )
-                    telegram_delivered = telegram_msg_id is not None
-                except Exception:
-                    logger.exception("AlertEngine: Telegram send failed for config %d", config["id"])
+            # Send Telegram notification (gated by global telegram_enabled preference)
+            if self._telegram_bot is not None and self._telegram_enabled:
+                # Use per-rule chat_id; fall back to global preference if chat_id is 0
+                effective_chat_id = config["chat_id"]
+                if effective_chat_id == 0 and self._global_chat_id is not None:
+                    effective_chat_id = self._global_chat_id
+
+                if effective_chat_id and effective_chat_id != 0:
+                    try:
+                        telegram_msg_id = await self._telegram_bot.send_alert(
+                            chat_id=effective_chat_id,
+                            message=message,
+                        )
+                        telegram_delivered = telegram_msg_id is not None
+                    except Exception:
+                        logger.exception("AlertEngine: Telegram send failed for config %d", config["id"])
+                else:
+                    logger.warning("AlertEngine: no valid chat_id for config %d, skipping Telegram", config["id"])
 
             # Write history
             await self._write_history(
