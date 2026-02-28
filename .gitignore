@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 venv/
+.venv/
 __pycache__/
 *.pyc
 
@@ -16,11 +17,17 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+bash.exe.stackdump
+
+# Database
+*.db
 
 # AgenticWorkflow runtime (session-specific, not source)
 .claude/context-snapshots/
 .claude/tasks/
 .claude/teams/
+.claude/hooks/setup.init.log
+.claude/state.yaml
 work_log.jsonl
 knowledge-index.jsonl
 verification-logs/
@@ -35,3 +42,6 @@ risk-scores.json
 dist/
 build/
 *.egg-info/
+
+# Lock files (package managers)
+uv.lock
