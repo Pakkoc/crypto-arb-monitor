@@ -51,7 +51,7 @@ async function seedHistoryFromDb(symbols: string[]) {
 
     for (const result of priceResults) {
       if (result.status !== "fulfilled") continue;
-      const rows = result.value.data?.data;
+      const rows = result.value.data;
       if (!Array.isArray(rows)) continue;
       for (const row of rows) {
         const entry = row as PriceEntry;
@@ -70,7 +70,7 @@ async function seedHistoryFromDb(symbols: string[]) {
 
     for (const result of spreadResults) {
       if (result.status !== "fulfilled") continue;
-      const rows = result.value.data?.data;
+      const rows = result.value.data;
       if (!Array.isArray(rows)) continue;
       for (const row of rows) {
         const entry = row as SpreadEntry;
