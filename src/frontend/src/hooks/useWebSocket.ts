@@ -121,9 +121,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   useEffect(() => {
     if (!enabled) return;
 
-    const { applySnapshot, setPrice, setSpread, setFxRate, setExchangeStatus } =
+    const { applySnapshot, setFxRate, setExchangeStatus } =
       usePriceStore.getState();
-    const { addTrigger } = useAlertStore.getState();
 
     function scheduleReconnect() {
       if (!enabledRef.current || closedRef.current) return;
