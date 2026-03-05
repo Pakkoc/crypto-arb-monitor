@@ -260,6 +260,7 @@ export interface DashboardPreferences {
   spread_matrix_mode: "percentage" | "absolute";
   chart_interval: "10s" | "1m" | "5m" | "1h";
   theme: "dark" | "light";
+  min_spread_pct: number;
 }
 
 export interface NotificationPreferences {
@@ -273,6 +274,38 @@ export interface UserPreferences {
   notifications: NotificationPreferences;
   timezone: string;
   locale: "ko-KR" | "en-US";
+}
+
+// ── Asset Status ─────────────────────────────────────────────────────────────
+
+export interface NetworkInfoEntry {
+  network: string;
+  deposit_enabled: boolean;
+  withdraw_enabled: boolean;
+  min_withdraw: string | null;
+  withdraw_fee: string | null;
+  confirmation_count: number | null;
+}
+
+export interface AssetStatusEntry {
+  exchange: ExchangeId;
+  symbol: string;
+  deposit_enabled: boolean;
+  withdraw_enabled: boolean;
+  networks: NetworkInfoEntry[];
+  updated_at_ms: number;
+}
+
+// ── Gate.io Lending ──────────────────────────────────────────────────────────
+
+export interface GateLendingEntry {
+  currency: string;
+  amount: string;
+  min_amount: string;
+  rate: string;
+  rate_day: string;
+  leverage: string;
+  borrowable: boolean;
 }
 
 // ── WebSocket Messages ──────────────────────────────────────────────────────────

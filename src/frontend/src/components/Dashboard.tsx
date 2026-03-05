@@ -16,6 +16,7 @@ import { SpreadMatrix } from "@/components/SpreadMatrix";
 import { SpreadChart } from "@/components/SpreadChart";
 import { PriceChart } from "@/components/PriceChart";
 import { RecentAlerts } from "@/components/RecentAlerts";
+import { AssetStatusPanel } from "@/components/AssetStatusPanel";
 import { KRW_EXCHANGES, USDT_EXCHANGES } from "@/lib/format";
 import type { WsStatus } from "@/hooks/useWebSocket";
 import type { ExchangeId } from "@/types/enums";
@@ -59,8 +60,9 @@ export function Dashboard({ wsStatus }: DashboardProps) {
       {/* Status bar */}
       <ExchangeStatusBar wsStatus={wsStatus} />
 
-      {/* Symbol selector */}
-      <div className="flex items-center gap-2">
+      {/* Symbol selector + min spread filter */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
         <span className="text-xs text-gray-500">종목:</span>
         <div className="flex gap-1">
           {availableSymbols.map((sym) => (
@@ -76,6 +78,7 @@ export function Dashboard({ wsStatus }: DashboardProps) {
               {sym}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
@@ -140,7 +143,10 @@ export function Dashboard({ wsStatus }: DashboardProps) {
             </div>
           </div>
 
-          {/* Row 3: Charts */}
+          {/* Row 3: Asset Status */}
+          <AssetStatusPanel symbol={selectedSymbol} />
+
+          {/* Row 4: Charts */}
           <div className="grid grid-cols-2 gap-4">
             <SpreadChart symbol={selectedSymbol} />
             <PriceChart

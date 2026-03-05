@@ -13,7 +13,9 @@ import type {
   AlertConfigCreate,
   AlertConfigUpdate,
   AlertHistoryEntry,
+  AssetStatusEntry,
   ExchangeStatus,
+  GateLendingEntry,
   HealthData,
   PaginatedResponse,
   PricesData,
@@ -166,6 +168,14 @@ export const api = {
 
   updatePreferences: (body: Partial<UserPreferences>) =>
     request<{ status: string; data: UserPreferences; timestamp_ms: number }>("PUT", "/preferences", body),
+
+  // Asset Status
+  getAssetStatus: (params?: { symbol?: string }) =>
+    request<{ status: string; data: AssetStatusEntry[]; timestamp_ms: number }>("GET", "/asset-status", undefined, params),
+
+  // Gate.io Lending
+  getGateLending: () =>
+    request<{ status: string; data: GateLendingEntry[]; timestamp_ms: number }>("GET", "/gate-lending"),
 };
 
 export default api;

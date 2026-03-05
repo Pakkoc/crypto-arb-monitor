@@ -39,13 +39,14 @@ class Settings(BaseSettings):
     upbit_access_key: str = ""
     upbit_secret_key: str = ""
 
-    coinone_access_token: str = ""
-
     binance_api_key: str = ""
     binance_api_secret: str = ""
 
     bybit_api_key: str = ""
     bybit_api_secret: str = ""
+
+    gate_api_key: str = ""
+    gate_api_secret: str = ""
 
     # ── FX Rate Fallback ───────────────────────────────────────────────────────
     exchangerate_api_key: str = ""

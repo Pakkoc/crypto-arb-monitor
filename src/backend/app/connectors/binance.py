@@ -28,12 +28,14 @@ class BinanceConnector(BaseConnector):
     """WebSocket connector for Binance (USDT spot market).
 
     Uses the combined stream endpoint with miniTicker for real-time
-    last trade prices. No explicit subscription message is needed
-    when using combined stream URLs — the streams are specified in the URL.
+    last trade prices and bookTicker for best bid/ask.
+    No explicit subscription message is needed — streams are in the URL.
     """
 
     def __init__(self, symbols: list[str]) -> None:
         super().__init__(_EXCHANGE_ID, symbols)
+        self._best_bid: dict[str, Decimal] = {}
+        self._best_ask: dict[str, Decimal] = {}
 
     @property
     def ws_url(self) -> str:
@@ -41,7 +43,9 @@ class BinanceConnector(BaseConnector):
 
         Example: wss://stream.binance.com:9443/stream?streams=btcusdt@miniTicker/ethusdt@miniTicker
         """
-        streams = "/".join(f"{sym.lower()}usdt@miniTicker" for sym in self.symbols)
+        ticker_streams = [f"{sym.lower()}usdt@miniTicker" for sym in self.symbols]
+        book_streams = [f"{sym.lower()}usdt@bookTicker" for sym in self.symbols]
+        streams = "/".join(ticker_streams + book_streams)
         return f"{_WS_BASE}/stream?streams={streams}"
 
     def build_subscribe_message(self) -> dict:
@@ -53,29 +57,33 @@ class BinanceConnector(BaseConnector):
         return {}
 
     def normalize(self, raw: dict) -> TickerUpdate | None:
-        """Parse Binance miniTicker message to canonical TickerUpdate.
+        """Parse Binance miniTicker/bookTicker message to canonical TickerUpdate.
 
         Combined stream wrapper: {"stream": "btcusdt@miniTicker", "data": {...}}
-        miniTicker data fields:
-            E: event time (ms)
-            s: symbol (e.g., 'BTCUSDT')
-            c: close price (= last trade price)
-            o: open price
-            h: high price
-            l: low price
-            v: total traded base asset volume
-            q: total traded quote asset volume
 
-        Uses close price (c) as the canonical price — this is the last
-        trade price, consistent with all other exchange connectors.
+        miniTicker data: E, s, c (close/last), v (volume), etc.
+        bookTicker data: s, b (best bid), B (bid qty), a (best ask), A (ask qty)
+
+        bookTicker messages update cached bid/ask; miniTicker emits TickerUpdate.
         """
-        # Combined stream wraps data in {'stream': ..., 'data': {...}}
+        stream: str = raw.get("stream", "")
         data = raw.get("data", raw)
         symbol_raw: str = data.get("s", "")
         if not symbol_raw.endswith("USDT"):
             return None
         symbol = symbol_raw[:-4].upper()  # BTCUSDT → BTC
         if symbol not in self.symbols:
+            return None
+
+        # Handle bookTicker — cache best bid/ask
+        if "@bookTicker" in stream:
+            try:
+                if data.get("b"):
+                    self._best_bid[symbol] = Decimal(str(data["b"]))
+                if data.get("a"):
+                    self._best_ask[symbol] = Decimal(str(data["a"]))
+            except Exception:
+                logger.exception("[binance] Failed to parse bookTicker")
             return None
 
         try:
@@ -92,8 +100,8 @@ class BinanceConnector(BaseConnector):
                 volume_24h=volume,
                 timestamp_ms=event_time,
                 received_at_ms=int(time.time() * 1000),
-                bid_price=None,
-                ask_price=None,
+                bid_price=self._best_bid.get(symbol),
+                ask_price=self._best_ask.get(symbol),
             )
         except Exception:
             logger.exception("[binance] Failed to normalize message")

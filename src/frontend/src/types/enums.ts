@@ -10,9 +10,9 @@
 export const ExchangeId = {
   BITHUMB: "bithumb",
   UPBIT: "upbit",
-  COINONE: "coinone",
   BINANCE: "binance",
   BYBIT: "bybit",
+  GATE: "gate",
 } as const;
 export type ExchangeId = (typeof ExchangeId)[keyof typeof ExchangeId];
 

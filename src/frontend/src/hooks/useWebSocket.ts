@@ -35,17 +35,22 @@ function backoffDelay(attempt: number): number {
   return Math.min(1_000 * Math.pow(2, attempt), MAX_BACKOFF_MS);
 }
 
+/** Max entries per history key — must match priceStore PRICE_HISTORY_SIZE. */
+const HISTORY_CAP = 500;
+
 /** Seed price & spread history from REST API after initial WS snapshot. */
 async function seedHistoryFromDb(symbols: string[]) {
-  const store = usePriceStore.getState();
   const targetSymbols = symbols.length > 0 ? symbols : ["BTC", "ETH", "XRP", "SOL", "DOGE"];
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
 
   try {
-    // Fetch price history for each symbol (all exchanges, last 1h, limit 1000)
+    const priceHistory: Record<string, PriceEntry[]> = {};
+    const spreadHistory: Record<string, SpreadEntry[]> = {};
+
+    // Fetch price history for each symbol (all exchanges, last 1h)
     const priceResults = await Promise.allSettled(
       targetSymbols.map((sym) =>
-        api.getPriceHistory({ symbol: sym, start_time: oneHourAgo, limit: 1000 }),
+        api.getPriceHistory({ symbol: sym, start_time: oneHourAgo, limit: HISTORY_CAP }),
       ),
     );
 
@@ -56,15 +61,15 @@ async function seedHistoryFromDb(symbols: string[]) {
       for (const row of rows) {
         const entry = row as PriceEntry;
         const key = `${entry.exchange}:${entry.symbol}`;
-        store.priceHistory[key] = store.priceHistory[key] ?? [];
-        store.priceHistory[key].push(entry);
+        const arr = priceHistory[key] ?? (priceHistory[key] = []);
+        if (arr.length < HISTORY_CAP) arr.push(entry);
       }
     }
 
-    // Fetch spread history for each symbol (all pairs, last 1h, limit 1000)
+    // Fetch spread history for each symbol (all pairs, last 1h)
     const spreadResults = await Promise.allSettled(
       targetSymbols.map((sym) =>
-        api.getSpreadHistory({ symbol: sym, start_time: oneHourAgo, limit: 1000 }),
+        api.getSpreadHistory({ symbol: sym, start_time: oneHourAgo, limit: HISTORY_CAP }),
       ),
     );
 
@@ -75,16 +80,16 @@ async function seedHistoryFromDb(symbols: string[]) {
       for (const row of rows) {
         const entry = row as SpreadEntry;
         const key = `${entry.exchange_a}:${entry.exchange_b}:${entry.symbol}`;
-        store.spreadHistory[key] = store.spreadHistory[key] ?? [];
-        store.spreadHistory[key].push(entry);
+        const arr = spreadHistory[key] ?? (spreadHistory[key] = []);
+        if (arr.length < HISTORY_CAP) arr.push(entry);
       }
     }
 
-    // Trigger a store update so components re-render with the seeded history
-    usePriceStore.setState({
-      priceHistory: { ...store.priceHistory },
-      spreadHistory: { ...store.spreadHistory },
-    });
+    // Merge into store (don't mutate existing state directly)
+    usePriceStore.setState((state) => ({
+      priceHistory: { ...state.priceHistory, ...priceHistory },
+      spreadHistory: { ...state.spreadHistory, ...spreadHistory },
+    }));
   } catch {
     // Non-critical — charts will still work with live data
     console.warn("[WS] Failed to seed history from DB");
@@ -204,9 +209,22 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
               usePriceStore.getState().setSpread(msg.data as SpreadEntry);
               break;
 
-            case WsEventType.ALERT_TRIGGERED:
+            case WsEventType.ALERT_TRIGGERED: {
               useAlertStore.getState().addTrigger(msg.data as WsAlertTriggeredData);
+              // Play alert sound if enabled
+              try {
+                const prefs = JSON.parse(localStorage.getItem("arb-preferences") ?? "{}");
+                const soundEnabled = prefs?.notifications?.sound_enabled ?? false;
+                if (soundEnabled) {
+                  const audio = new Audio("/alert-sound.mp3");
+                  audio.volume = 0.5;
+                  audio.play().catch(() => {});
+                }
+              } catch {
+                // Ignore sound errors
+              }
               break;
+            }
 
             case WsEventType.EXCHANGE_STATUS: {
               const esData = msg.data as WsExchangeStatusData;

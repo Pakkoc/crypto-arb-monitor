@@ -5,9 +5,11 @@
  * and same-currency spreads among KRW exchanges.
  * Color-coded cells: green (< 1%), yellow (1-2%), orange (2-3%), red (> 3%).
  */
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePriceStore } from "@/stores/priceStore";
 import { usePreferences } from "@/hooks/usePreferences";
+import { api } from "@/lib/api";
 import {
   EXCHANGE_NAMES,
   KRW_EXCHANGES,
@@ -18,6 +20,7 @@ import {
   formatPrice,
   timeAgo,
 } from "@/lib/format";
+import type { AssetStatusEntry, SpreadEntry } from "@/types";
 
 interface SpreadMatrixProps {
   symbol: string;
@@ -40,11 +43,15 @@ const SpreadCell = memo(function SpreadCell({
   rowExchange,
   colExchange,
   spreadMode = "percentage",
+  minSpreadPct = 0,
+  withdrawSuspended,
 }: {
   data: SpreadCellData | null;
   rowExchange: string;
   colExchange: string;
   spreadMode?: "percentage" | "absolute";
+  minSpreadPct?: number;
+  withdrawSuspended?: Set<string>;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -60,6 +67,25 @@ const SpreadCell = memo(function SpreadCell({
     return (
       <td className="border border-gray-800 p-2 text-center text-xs text-gray-700">
         N/A
+      </td>
+    );
+  }
+
+  // Auto-filter: both exchanges have withdrawal suspended → not actionable
+  if (withdrawSuspended && withdrawSuspended.has(rowExchange) && withdrawSuspended.has(colExchange)) {
+    return (
+      <td className="border border-gray-800 p-2 text-center text-xs text-gray-700" title="양쪽 거래소 출금 중지">
+        <span className="text-red-700">⊘</span>
+      </td>
+    );
+  }
+
+  const belowMin = minSpreadPct > 0 && Math.abs(Number(data.spreadPct)) < minSpreadPct;
+
+  if (belowMin) {
+    return (
+      <td className="border border-gray-800 p-2 text-center text-xs text-gray-700">
+        —
       </td>
     );
   }
@@ -131,9 +157,66 @@ const SpreadCell = memo(function SpreadCell({
 });
 
 export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
-  const spreads = usePriceStore((s) => s.spreads);
   const { dashboard } = usePreferences();
   const spreadMode = dashboard.spread_matrix_mode;
+  const minSpreadPct = dashboard.min_spread_pct ?? 0;
+
+  // Fetch asset status to auto-filter coins with suspended withdrawals
+  const { data: assetStatuses } = useQuery({
+    queryKey: ["asset-status", symbol],
+    queryFn: async () => {
+      const res = await api.getAssetStatus({ symbol });
+      return res.data as AssetStatusEntry[];
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  // Build a set of exchanges where withdrawal is suspended for this symbol
+  const withdrawSuspended = useMemo(() => {
+    const set = new Set<string>();
+    if (assetStatuses) {
+      for (const s of assetStatuses) {
+        if (!s.withdraw_enabled) set.add(s.exchange);
+      }
+    }
+    return set;
+  }, [assetStatuses]);
+
+  // Build all relevant keys for this symbol
+  const allExchanges = [...KRW_EXCHANGES, ...USDT_EXCHANGES];
+  const relevantKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (let i = 0; i < allExchanges.length; i++) {
+      for (let j = i + 1; j < allExchanges.length; j++) {
+        keys.push(`${allExchanges[i]}:${allExchanges[j]}:${symbol}`);
+        keys.push(`${allExchanges[j]}:${allExchanges[i]}:${symbol}`);
+      }
+    }
+    return keys;
+  }, [symbol]);
+
+  // Subscribe only to spreads for the current symbol — returns a stable fingerprint string
+  const spreadsFingerprint = usePriceStore((s) => {
+    const parts: string[] = [];
+    for (const key of relevantKeys) {
+      const entry = s.spreads[key];
+      if (entry) parts.push(`${key}:${entry.spread_pct}:${entry.timestamp_ms}`);
+    }
+    return parts.join("|");
+  });
+
+  // Build a lookup map from the store only when fingerprint changes
+  const spreadsMap = useMemo(() => {
+    const map: Record<string, SpreadEntry> = {};
+    const store = usePriceStore.getState();
+    for (const key of relevantKeys) {
+      const entry = store.spreads[key];
+      if (entry) map[key] = entry;
+    }
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spreadsFingerprint, relevantKeys]);
 
   // Build lookup for spreads
   const getSpreadData = (
@@ -143,11 +226,11 @@ export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
     // Try both orderings
     const key1 = `${exchangeA}:${exchangeB}:${symbol}`;
     const key2 = `${exchangeB}:${exchangeA}:${symbol}`;
-    const entry = spreads[key1] ?? spreads[key2];
+    const entry = spreadsMap[key1] ?? spreadsMap[key2];
     if (!entry) return null;
 
     // If we found the reversed key, negate the spread
-    const isReversed = !spreads[key1] && !!spreads[key2];
+    const isReversed = !spreadsMap[key1] && !!spreadsMap[key2];
     const pct = isReversed
       ? String(-Number(entry.spread_pct))
       : entry.spread_pct;
@@ -206,6 +289,8 @@ export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
                       rowExchange={rowEx}
                       colExchange={colEx}
                       spreadMode={spreadMode}
+                      minSpreadPct={minSpreadPct}
+                      withdrawSuspended={withdrawSuspended}
                     />
                   ))}
                 </tr>
@@ -252,6 +337,8 @@ export function SpreadMatrix({ symbol }: SpreadMatrixProps) {
                       rowExchange={rowEx}
                       colExchange={colEx}
                       spreadMode={spreadMode}
+                      minSpreadPct={minSpreadPct}
+                      withdrawSuspended={withdrawSuspended}
                     />
                   ))}
                 </tr>

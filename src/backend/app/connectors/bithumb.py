@@ -27,11 +27,14 @@ class BithumbConnector(BaseConnector):
     """WebSocket connector for Bithumb (KRW market).
 
     Uses the current /v1/ WebSocket API with KRW-BTC market code format.
+    Subscribes to both ticker and orderbook for bid/ask prices.
     """
 
     def __init__(self, symbols: list[str]) -> None:
         super().__init__(_EXCHANGE_ID, symbols)
         self._subscribe_as_single_array = True
+        self._best_bid: dict[str, Decimal] = {}
+        self._best_ask: dict[str, Decimal] = {}
 
     @property
     def ws_url(self) -> str:
@@ -51,20 +54,41 @@ class BithumbConnector(BaseConnector):
                 "codes": codes,
                 "isOnlyRealtime": True,
             },
+            {
+                "type": "orderbook",
+                "codes": codes,
+                "isOnlyRealtime": True,
+            },
             {"format": "DEFAULT"},
         ]
 
     def normalize(self, raw: dict) -> TickerUpdate | None:
-        """Parse Bithumb v1 ticker message to canonical TickerUpdate.
+        """Parse Bithumb v1 ticker/orderbook message to canonical TickerUpdate.
 
         Returns None for non-ticker messages (ACKs, status, errors).
-        Bithumb v1 ticker fields mirror Upbit DEFAULT format:
-          type, code, trade_price, acc_trade_volume_24h, timestamp, etc.
+        Orderbook messages update the cached best bid/ask which are
+        injected into subsequent ticker updates.
         """
-        if raw.get("type") != "ticker":
+        msg_type = raw.get("type")
+
+        # Handle orderbook messages — cache best bid/ask
+        if msg_type == "orderbook":
+            code: str = raw.get("code", "")
+            if code.startswith("KRW-"):
+                symbol = code[4:].upper()
+                units = raw.get("orderbook_units", [])
+                if units:
+                    best = units[0]
+                    if best.get("bid_price"):
+                        self._best_bid[symbol] = Decimal(str(best["bid_price"]))
+                    if best.get("ask_price"):
+                        self._best_ask[symbol] = Decimal(str(best["ask_price"]))
             return None
 
-        code: str = raw.get("code", "")
+        if msg_type != "ticker":
+            return None
+
+        code = raw.get("code", "")
         if not code.startswith("KRW-"):
             return None
 
@@ -81,8 +105,8 @@ class BithumbConnector(BaseConnector):
                 volume_24h=Decimal(str(raw.get("acc_trade_volume_24h", "0"))),
                 timestamp_ms=int(raw.get("timestamp", time.time() * 1000)),
                 received_at_ms=int(time.time() * 1000),
-                bid_price=None,
-                ask_price=None,
+                bid_price=self._best_bid.get(symbol),
+                ask_price=self._best_ask.get(symbol),
             )
         except Exception:
             logger.exception("[bithumb] Failed to normalize message")

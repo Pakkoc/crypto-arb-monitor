@@ -66,15 +66,15 @@ async def _seed_reference_data() -> None:
                         Exchange(id="upbit", name="Upbit", currency="KRW",
                                  ws_url="wss://api.upbit.com/websocket/v1",
                                  rest_url="https://api.upbit.com"),
-                        Exchange(id="coinone", name="Coinone", currency="KRW",
-                                 ws_url="wss://stream.coinone.co.kr",
-                                 rest_url="https://api.coinone.co.kr"),
                         Exchange(id="binance", name="Binance", currency="USDT",
                                  ws_url="wss://stream.binance.com:9443/ws",
                                  rest_url="https://api.binance.com"),
                         Exchange(id="bybit", name="Bybit", currency="USDT",
                                  ws_url="wss://stream.bybit.com/v5/public/spot",
                                  rest_url="https://bybit-exchange.github.io"),
+                        Exchange(id="gate", name="Gate.io", currency="USDT",
+                                 ws_url="wss://api.gateio.ws/ws/v4/",
+                                 rest_url="https://api.gateio.ws"),
                     ]
                     session.add_all(exchanges)
                     logger.info("Seeded %d exchanges", len(exchanges))
@@ -170,6 +170,18 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
         _spread_db_writer(spread_calculator, price_store), name="spread-db-writer"
     )
 
+    # 9. Start AssetStatusService
+    from app.services.asset_status import AssetStatusService  # noqa: PLC0415
+    asset_status_service = AssetStatusService()
+    await asset_status_service.start()
+    app.state.asset_status_service = asset_status_service
+
+    # 10. Start GateLendingService
+    from app.services.gate_lending import GateLendingService  # noqa: PLC0415
+    gate_lending_service = GateLendingService()
+    await gate_lending_service.start()
+    app.state.gate_lending_service = gate_lending_service
+
     logger.info("Startup complete — serving on %s:%d", settings.host, settings.port)
 
     yield
@@ -181,6 +193,8 @@ async def lifespan(app: FastAPI):  # noqa: ANN201
         await spread_db_task
     except Exception:
         pass
+    await gate_lending_service.stop()
+    await asset_status_service.stop()
     await price_store.stop()
     await exchange_manager.stop()
     await telegram_bot.stop()

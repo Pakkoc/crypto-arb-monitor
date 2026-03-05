@@ -13,9 +13,9 @@ class ExchangeId(StrEnum):
 
     BITHUMB = "bithumb"
     UPBIT = "upbit"
-    COINONE = "coinone"
     BINANCE = "binance"
     BYBIT = "bybit"
+    GATE = "gate"
 
 
 class Currency(StrEnum):
@@ -73,7 +73,7 @@ class FxRateSource(StrEnum):
 
 
 class FallbackMode(StrEnum):
-    """Coinone connector fallback modes when WebSocket is unavailable."""
+    """Connector fallback modes when WebSocket is unavailable."""
 
     NONE = "none"
     REST_POLLING = "REST_POLLING"
@@ -111,28 +111,28 @@ class WsChannel(StrEnum):
 EXCHANGE_CURRENCY: dict[str, str] = {
     "bithumb": "KRW",
     "upbit": "KRW",
-    "coinone": "KRW",
     "binance": "USDT",
     "bybit": "USDT",
+    "gate": "USDT",
 }
 
 KIMCHI_PREMIUM_PAIRS: list[tuple[str, str]] = [
     ("bithumb", "binance"),
     ("bithumb", "bybit"),
+    ("bithumb", "gate"),
     ("upbit", "binance"),
     ("upbit", "bybit"),
-    ("coinone", "binance"),
-    ("coinone", "bybit"),
+    ("upbit", "gate"),
 ]
 
 SAME_CURRENCY_PAIRS: list[tuple[str, str]] = [
     ("bithumb", "upbit"),
-    ("bithumb", "coinone"),
-    ("upbit", "coinone"),
     ("binance", "bybit"),
+    ("binance", "gate"),
+    ("bybit", "gate"),
 ]
 
-ALL_EXCHANGE_PAIRS: list[tuple[str, str]] = KIMCHI_PREMIUM_PAIRS + SAME_CURRENCY_PAIRS  # 10 total
+ALL_EXCHANGE_PAIRS: list[tuple[str, str]] = KIMCHI_PREMIUM_PAIRS + SAME_CURRENCY_PAIRS
 
 DEFAULT_SYMBOLS: list[str] = ["BTC", "ETH", "XRP", "SOL", "DOGE"]
 

@@ -172,6 +172,10 @@ export function SettingsPage() {
     mutationFn: (body: Partial<UserPreferences>) => api.updatePreferences(body),
     onSuccess: (res) => {
       queryClient.setQueryData(["preferences"], res.data);
+      // Sync to localStorage for quick access (e.g., sound alerts in WS hook)
+      try {
+        localStorage.setItem("arb-preferences", JSON.stringify(res.data));
+      } catch { /* ignore */ }
     },
   });
 
@@ -345,6 +349,26 @@ export function SettingsPage() {
             ]}
             value={dashboard.chart_interval}
             onChange={(v) => setDashboard({ ...dashboard, chart_interval: v })}
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="최소 수익률 필터"
+          description="이 값 미만의 스프레드를 흐리게 표시합니다 (%)"
+        >
+          <input
+            type="number"
+            min={0}
+            max={50}
+            step={0.1}
+            value={dashboard.min_spread_pct ?? 0}
+            onChange={(e) =>
+              setDashboard({
+                ...dashboard,
+                min_spread_pct: Number(e.target.value) || 0,
+              })
+            }
+            className="w-20 rounded border border-gray-700 bg-gray-800 px-3 py-1.5 text-right font-mono text-sm text-gray-300 outline-none focus:border-blue-600"
           />
         </FieldRow>
 

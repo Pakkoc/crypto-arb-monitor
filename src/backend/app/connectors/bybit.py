@@ -35,18 +35,27 @@ class BybitConnector(BaseConnector):
 
     def __init__(self, symbols: list[str]) -> None:
         super().__init__(_EXCHANGE_ID, symbols)
+        # Cache bid/ask across delta messages (delta may only contain lastPrice)
+        self._best_bid: dict[str, Decimal] = {}
+        self._best_ask: dict[str, Decimal] = {}
 
     @property
     def ws_url(self) -> str:
         return _WS_URL
 
-    def build_subscribe_message(self) -> dict:
-        """Build Bybit V5 ticker subscription message.
+    def build_subscribe_message(self) -> list[dict]:
+        """Build Bybit V5 subscription messages.
 
-        Subscribes to tickers.{SYMBOL}USDT for each tracked symbol.
+        Subscribes to:
+        - tickers.{SYMBOL}USDT for price data
+        - orderbook.1.{SYMBOL}USDT for best bid/ask
         """
-        topics = [f"tickers.{sym}USDT" for sym in self.symbols]
-        return {"op": "subscribe", "args": topics}
+        ticker_topics = [f"tickers.{sym}USDT" for sym in self.symbols]
+        ob_topics = [f"orderbook.1.{sym}USDT" for sym in self.symbols]
+        return [
+            {"op": "subscribe", "args": ticker_topics},
+            {"op": "subscribe", "args": ob_topics},
+        ]
 
     def normalize(self, raw: dict) -> TickerUpdate | None:
         """Parse Bybit V5 ticker message to canonical TickerUpdate.
@@ -75,6 +84,21 @@ class BybitConnector(BaseConnector):
             return None
 
         topic: str = raw.get("topic", "")
+
+        # Handle orderbook.1 messages for bid/ask caching
+        if topic.startswith("orderbook.1."):
+            data = raw.get("data", {})
+            sym_raw = topic.replace("orderbook.1.", "")
+            if sym_raw.endswith("USDT"):
+                sym = sym_raw[:-4].upper()
+                bids = data.get("b", [])
+                asks = data.get("a", [])
+                if bids:
+                    self._best_bid[sym] = Decimal(str(bids[0][0]))
+                if asks:
+                    self._best_ask[sym] = Decimal(str(asks[0][0]))
+            return None  # Don't emit TickerUpdate from orderbook
+
         if not topic.startswith("tickers."):
             return None
 
@@ -92,12 +116,13 @@ class BybitConnector(BaseConnector):
             if not last_price or last_price == "0":
                 return None
 
-            bid: Decimal | None = None
-            ask: Decimal | None = None
+            # Update cached bid/ask when present in message
             if data.get("bid1Price"):
-                bid = Decimal(str(data["bid1Price"]))
+                self._best_bid[symbol] = Decimal(str(data["bid1Price"]))
             if data.get("ask1Price"):
-                ask = Decimal(str(data["ask1Price"]))
+                self._best_ask[symbol] = Decimal(str(data["ask1Price"]))
+            bid = self._best_bid.get(symbol)
+            ask = self._best_ask.get(symbol)
 
             return TickerUpdate(
                 exchange=_EXCHANGE_ID,

@@ -1,7 +1,7 @@
-"""ExchangeManager — orchestrates all 5 exchange connectors.
+"""ExchangeManager — orchestrates all exchange connectors.
 
 Responsibilities:
-- Instantiate and start all 5 connectors as asyncio Tasks
+- Instantiate and start all connectors as asyncio Tasks
 - Provide the shared asyncio.Queue for TickerUpdate routing
 - Expose connector state for the health endpoint
 - Provide connector-level metadata (ws_url, currency, name)
@@ -14,9 +14,9 @@ import logging
 from app.connectors.base import BaseConnector
 from app.connectors.bithumb import BithumbConnector
 from app.connectors.upbit import UpbitConnector
-from app.connectors.coinone import CoinoneConnector
 from app.connectors.binance import BinanceConnector
 from app.connectors.bybit import BybitConnector
+from app.connectors.gate import GateConnector
 from app.schemas.price import TickerUpdate
 from app.utils.enums import (
     ConnectorState,
@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 _EXCHANGE_NAMES: dict[str, str] = {
     "bithumb": "Bithumb",
     "upbit": "Upbit",
-    "coinone": "Coinone",
     "binance": "Binance",
     "bybit": "Bybit",
+    "gate": "Gate.io",
 }
 
 
@@ -57,9 +57,9 @@ class ExchangeManager:
         self._connectors = {
             "bithumb": BithumbConnector(self.symbols),
             "upbit": UpbitConnector(self.symbols),
-            "coinone": CoinoneConnector(self.symbols),
             "binance": BinanceConnector(self.symbols),
             "bybit": BybitConnector(self.symbols),
+            "gate": GateConnector(self.symbols),
         }
         for connector in self._connectors.values():
             connector.attach_queue(self._tick_queue)

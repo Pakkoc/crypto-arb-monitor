@@ -38,6 +38,9 @@ autopilot-logs/
 risk-scores.json
 .tdd-guard
 
+# Personal / sensitive
+server_guide.md
+
 # Build
 dist/
 build/

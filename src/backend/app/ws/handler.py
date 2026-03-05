@@ -235,7 +235,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             "data": {
                 "server_version": "1.0.0",
                 "available_symbols": list(DEFAULT_SYMBOLS),
-                "exchanges": ["bithumb", "upbit", "coinone", "binance", "bybit"],
+                "exchanges": ["bithumb", "upbit", "binance", "bybit", "gate"],
                 "heartbeat_interval_ms": _HEARTBEAT_INTERVAL_S * 1000,
             },
             "seq": client.next_seq(),

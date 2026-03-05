@@ -119,20 +119,20 @@ export function spreadBgClass(pct: string): string {
 export const EXCHANGE_NAMES: Record<string, string> = {
   bithumb: "Bithumb",
   upbit: "Upbit",
-  coinone: "Coinone",
   binance: "Binance",
   bybit: "Bybit",
+  gate: "Gate.io",
 };
 
 /**
  * KRW exchanges (domestic).
  */
-export const KRW_EXCHANGES = ["bithumb", "upbit", "coinone"] as const;
+export const KRW_EXCHANGES = ["bithumb", "upbit"] as const;
 
 /**
  * USDT exchanges (global).
  */
-export const USDT_EXCHANGES = ["binance", "bybit"] as const;
+export const USDT_EXCHANGES = ["binance", "bybit", "gate"] as const;
 
 /**
  * All exchanges in display order.

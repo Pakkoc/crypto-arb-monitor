@@ -11,10 +11,11 @@ import type { UserPreferences, DashboardPreferences, NotificationPreferences } f
 
 const DEFAULT_DASHBOARD: DashboardPreferences = {
   default_symbol: "BTC",
-  visible_exchanges: ["upbit", "bithumb", "coinone", "binance", "bybit"],
+  visible_exchanges: ["upbit", "bithumb", "binance", "bybit", "gate"],
   spread_matrix_mode: "percentage",
   chart_interval: "1h",
   theme: "dark",
+  min_spread_pct: 0,
 };
 
 const DEFAULT_NOTIFICATIONS: NotificationPreferences = {

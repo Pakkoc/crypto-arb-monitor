@@ -4,7 +4,7 @@
  * Shows spread percentage over time for selected exchange pairs.
  * Auto-updates with new WebSocket data from the priceStore spread history.
  */
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -94,33 +94,22 @@ export function SpreadChart({ symbol }: SpreadChartProps) {
     });
   }, [pairKeysStr]);
 
-  // Subscribe only to the spread histories we actually need
-  const spreadHistory = usePriceStore((s) => s.spreadHistory);
-
-  // Build chart data from spread history
-  // Use a ref to cache the previous result and only recompute when data actually changes
-  const prevChartDataRef = useRef<{ keys: string; range: TimeRange; histLen: string; data: ChartDataPoint[] }>({
-    keys: "", range: "1h", histLen: "", data: [],
+  // Subscribe to a fingerprint of the relevant history lengths — avoids full object subscription
+  const historyFingerprint = usePriceStore((s) => {
+    if (activePairs.length === 0) return "";
+    return activePairs.map((p) => `${p.key}:${s.spreadHistory[p.key]?.length ?? 0}`).join("|");
   });
 
+  // Build chart data only when fingerprint, time range, or pairs change
   const chartData = useMemo(() => {
-    // Build a fingerprint of history lengths to detect actual data changes
-    const histLen = activePairs.map((p) => (spreadHistory[p.key]?.length ?? 0).toString()).join(",");
-    const cached = prevChartDataRef.current;
-    if (cached.keys === pairKeysStr && cached.range === timeRange && cached.histLen === histLen) {
-      return cached.data;
-    }
+    if (activePairs.length === 0 || !historyFingerprint) return [];
 
-    if (activePairs.length === 0) {
-      prevChartDataRef.current = { keys: pairKeysStr, range: timeRange, histLen, data: [] };
-      return [];
-    }
-
+    const store = usePriceStore.getState();
     const cutoff = Date.now() - TIME_RANGE_MS[timeRange];
     const pointMap = new Map<number, ChartDataPoint>();
 
     for (const pair of activePairs) {
-      const history = spreadHistory[pair.key] ?? [];
+      const history = store.spreadHistory[pair.key] ?? [];
       for (const entry of history) {
         if (entry.timestamp_ms < cutoff) continue;
         const bucket = Math.floor(entry.timestamp_ms / 10000) * 10000;
@@ -133,10 +122,9 @@ export function SpreadChart({ symbol }: SpreadChartProps) {
       }
     }
 
-    const result = Array.from(pointMap.values()).sort((a, b) => a.time - b.time);
-    prevChartDataRef.current = { keys: pairKeysStr, range: timeRange, histLen, data: result };
-    return result;
-  }, [activePairs, spreadHistory, timeRange, pairKeysStr]);
+    return Array.from(pointMap.values()).sort((a, b) => a.time - b.time);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePairs, historyFingerprint, timeRange]);
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">

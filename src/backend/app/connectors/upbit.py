@@ -33,6 +33,8 @@ class UpbitConnector(BaseConnector):
     def __init__(self, symbols: list[str]) -> None:
         super().__init__(_EXCHANGE_ID, symbols)
         self._subscribe_as_single_array = True
+        self._best_bid: dict[str, Decimal] = {}
+        self._best_ask: dict[str, Decimal] = {}
 
     @property
     def ws_url(self) -> str:
@@ -58,34 +60,46 @@ class UpbitConnector(BaseConnector):
                 "codes": codes,
                 "isOnlyRealtime": True,
             },
+            {
+                "type": "orderbook",
+                "codes": codes,
+                "isOnlyRealtime": True,
+            },
             {"format": "SIMPLE"},
         ]
 
     def normalize(self, raw: dict) -> TickerUpdate | None:
-        """Parse Upbit SIMPLE format ticker message to canonical TickerUpdate.
+        """Parse Upbit SIMPLE format ticker/orderbook message to canonical TickerUpdate.
 
-        Upbit SIMPLE format keys:
-            ty: type ('ticker')
-            cd: code (e.g. 'KRW-BTC')
-            tp: trade_price
-            tv: trade_volume
-            tms: timestamp (ms)
-            atv24h: acc_trade_volume_24h
-            hp: high_price
-            lp: low_price
-            op: opening_price
-            pcp: prev_closing_price
-            ab: ask/bid state ('ASK' or 'BID')
-            st: stream_type ('REALTIME' or 'SNAPSHOT')
+        Upbit SIMPLE format keys for ticker (ty='ticker'):
+            cd: code, tp: trade_price, tms: timestamp, atv24h: volume_24h
 
-        Returns None for non-ticker messages.
-        USDT ticks are passed through with symbol='USDT' so PriceStore
-        can extract the FX rate.
+        Upbit SIMPLE format keys for orderbook (ty='orderbook'):
+            cd: code, obu: orderbook_units
+            obu[0].bp: best bid price, obu[0].ap: best ask price
+
+        Orderbook messages update cached bid/ask, ticker messages emit TickerUpdate.
         """
-        if raw.get("ty") != "ticker":
+        msg_type = raw.get("ty")
+
+        # Handle orderbook messages — cache best bid/ask
+        if msg_type == "orderbook":
+            code: str = raw.get("cd", "")
+            if code.startswith("KRW-"):
+                symbol = code[4:].upper()
+                units = raw.get("obu", [])
+                if units:
+                    best = units[0]
+                    if best.get("bp"):
+                        self._best_bid[symbol] = Decimal(str(best["bp"]))
+                    if best.get("ap"):
+                        self._best_ask[symbol] = Decimal(str(best["ap"]))
             return None
 
-        code: str = raw.get("cd", "")
+        if msg_type != "ticker":
+            return None
+
+        code = raw.get("cd", "")
         if not code.startswith("KRW-"):
             return None
 
@@ -102,8 +116,8 @@ class UpbitConnector(BaseConnector):
                 volume_24h=Decimal(str(raw.get("atv24h", "0"))),
                 timestamp_ms=int(raw.get("tms", time.time() * 1000)),
                 received_at_ms=int(time.time() * 1000),
-                bid_price=None,
-                ask_price=None,
+                bid_price=self._best_bid.get(symbol),
+                ask_price=self._best_ask.get(symbol),
             )
         except Exception:
             logger.exception("[upbit] Failed to normalize message")

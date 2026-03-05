@@ -355,7 +355,7 @@ async def list_symbols(request: Request) -> dict:
         rows = result.scalars().all()
 
     # Build exchange coverage (all exchanges support all symbols by default)
-    all_exchanges = ["bithumb", "upbit", "coinone", "binance", "bybit"]
+    all_exchanges = ["bithumb", "upbit", "binance", "bybit", "gate"]
     data = [
         {
             "symbol": row.symbol,
@@ -467,7 +467,7 @@ async def get_fx_rate(request: Request) -> dict:
 _DEFAULT_PREFERENCES = {
     "dashboard": {
         "default_symbol": "BTC",
-        "visible_exchanges": ["bithumb", "upbit", "coinone", "binance", "bybit"],
+        "visible_exchanges": ["bithumb", "upbit", "binance", "bybit", "gate"],
         "spread_matrix_mode": "percentage",
         "chart_interval": "5m",
         "theme": "dark",

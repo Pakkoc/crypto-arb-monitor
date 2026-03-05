@@ -25,7 +25,7 @@ class AlertConfigCreate(BaseModel):
     @classmethod
     def validate_exchange(cls, v: str | None) -> str | None:
         if v is not None:
-            valid = {"bithumb", "upbit", "coinone", "binance", "bybit"}
+            valid = {"bithumb", "upbit", "binance", "bybit", "gate"}
             if v not in valid:
                 raise ValueError(f"Invalid exchange: {v!r}. Must be one of {sorted(valid)}")
         return v
@@ -51,7 +51,7 @@ class AlertConfigUpdate(BaseModel):
     @classmethod
     def validate_exchange(cls, v: str | None) -> str | None:
         if v is not None:
-            valid = {"bithumb", "upbit", "coinone", "binance", "bybit"}
+            valid = {"bithumb", "upbit", "binance", "bybit", "gate"}
             if v not in valid:
                 raise ValueError(f"Invalid exchange: {v!r}.")
         return v
